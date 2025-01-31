@@ -10,62 +10,73 @@ import re
 def pregunta_01():
     """
     Construya y retorne un dataframe de Pandas a partir del archivo
-    'files/input/clusters_report.txt'.
+    'files/input/clusters_report.txt'. Los requierimientos son los siguientes:
+
+    - El dataframe tiene la misma estructura que el archivo original.
+    - Los nombres de las columnas deben ser en minusculas, reemplazando los
+      espacios por guiones bajos.
+    - Las palabras clave deben estar separadas por coma y con un solo
+      espacio entre palabra y palabra.
+
+
     """
-    
+
+    def titulo(head):
+        # Fomato titulos
+        return head.lower().replace(" ", "_")
+
     # Leer el archivo ignorando las líneas en blanco al inicio
     with open("files/input/clusters_report.txt", "r", encoding="utf-8") as file:
-        lines = file.readlines()
+        lineas = file.readlines()
     
-    # Determinar la línea donde inician los datos
-    start_index = 0
-    for i, line in enumerate(lines):
-        if line.strip().startswith("Cluster"):  # Encontrar el encabezado de las columnas
-            start_index = i + 1
-            break
-    
-    # Extraer el contenido de datos sin encabezado
-    data_lines = lines[start_index:]
-    
-    # Lista para almacenar las filas procesadas
-    data = []
-    
-    # Variables auxiliares para unir líneas de palabras clave
-    current_cluster = None
-    current_count = None
-    current_percentage = None
-    current_keywords = ""
-    
-    for line in data_lines:
-        line = line.rstrip()
-        if not line:
-            continue  # Saltar líneas vacías
-        
-        # Intentar capturar una nueva línea de cluster
-        match = re.match(r"(\d+)\s+(\d+)\s+([\d\.]+)%\s+(.*)", line)
-        
-        if match:
-            # Si ya se estaba construyendo una fila, agregarla a la lista
-            if current_cluster is not None:
-                data.append([current_cluster, current_count, current_percentage, current_keywords.strip()])
-            
-            # Capturar nuevos valores
-            current_cluster = int(match.group(1))
-            current_count = int(match.group(2))
-            current_percentage = float(match.group(3))
-            current_keywords = match.group(4)
-        else:
-            # Línea de continuación de palabras clave
-            current_keywords += " " + line.strip()
-    
-    # Agregar la última fila procesada
-    if current_cluster is not None:
-        data.append([current_cluster, current_count, current_percentage, current_keywords.strip()])
-    
-    # Crear DataFrame
-    df = pd.DataFrame(data, columns=["cluster", "cantidad_de_palabras_clave", "porcentaje_de_palabras_clave", "principales_palabras_clave"])
-    
-    # Normalizar las palabras clave (quitar espacios extra y separar por coma correctamente)
-    df["principales_palabras_clave"] = df["principales_palabras_clave"].apply(lambda x: re.sub(r"\s*,\s*", ", ", x))
-    
-    return df
+    # Limpieza titulos
+    t1 = re.sub(r"\s{2,}", "-", lineas[0]).strip().split("-")
+    t2 = re.sub(r"\s{2,}", "-", lineas[1]).strip().split("-")
+    t1.pop()
+    t2.pop(0)
+
+    cabeceras = [
+        t1[0],  
+        f"{t1[1]} {t2[0]}",  
+        f"{t1[2]} {t2[1]}",
+        t1[3], 
+    ]    
+
+    # Aplicar formato
+    cabeceras = [titulo(t) for t in cabeceras]
+
+    # Crear la data
+    df = pd.read_fwf("files/input/clusters_report.txt", widths = [9, 16, 16, 80], 
+        header = None, names = cabeceras, skip_blank_lines = False,
+        converters = {cabeceras[2]: lambda x: x.rstrip(" %").replace(",", ".")},
+    ).iloc[4:] 
+
+    # Limpiar palabras clave
+    palabras_clave = df[cabeceras[3]]
+    df = df[df[cabeceras[0]].notna()].drop(columns=[cabeceras[3]])
+    df = df.astype({
+        cabeceras[0]: int,
+        cabeceras[1]: int,
+        cabeceras[2]: float,
+    })
+
+    # Guardar palabras clave
+    claves = []
+    texto = ""
+    for p in palabras_clave:
+        if isinstance(p, str): 
+            if p.endswith("."): 
+                p = p[:-1]
+            p = re.sub(r'\s+', ' ', p).strip()
+            texto += p + " "
+        elif texto: 
+            claves.append(", ".join(re.split(r'\s*,\s*', texto.strip())))
+            texto = ""
+    if texto:
+        claves.append(", ".join(re.split(r'\s*,\s*', texto.strip())))
+
+    df[cabeceras[3]] = claves
+
+    return df  
+
+print(pregunta_01())
